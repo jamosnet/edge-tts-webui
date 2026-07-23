@@ -5,7 +5,14 @@
 
 这是一个简单易用的网页听书与文本转语音工具。把你平时想看的文章、新闻、小说粘贴进来，就可以像听播客一样直接听，或者导出成 MP3 放到手机和随身听里离线听。
 
+直接调用微软 Edge 在线神经网络语音服务。**无需安装 Microsoft Edge 浏览器，无需 Windows 系统，也无需申请复杂的 API Key 密钥**。
+
 ---
+## 界面预览
+
+| 桌面端界面 | 移动端界面 |
+| :---: | :---: |
+| <img src="img/pc.png" width="500" alt="桌面端界面"> | <img src="img/wap.png" width="220" alt="移动端界面"> |
 
 ## 它能帮你干什么？
 
@@ -58,7 +65,7 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 chmod +x init.sh 
 docker run -itd --name edge_tts --hostname edge_tts  -p 8000:80 -v /etc/localtime:/etc/localtime:ro -v /home/edge_tts:/datav python:3.11-alpine3.20 /datav/init.sh
-在浏览器打开 `http://127.0.0.1:8000` 即可开始使用。
+在浏览器打开 http://127.0.0.1:8000 即可开始使用。
 ```
 ---
 
