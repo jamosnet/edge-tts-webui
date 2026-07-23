@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge-TTS 长文本朗读服务</title>
+    <style>
+    /* 全局基础样式 */
+    body { 
+        font-family: system-ui, -apple-system, sans-serif; 
+        max-width: 850px; 
+        margin: 30px auto; 
+        padding: 0 20px; 
+        background: #f4f6f8; 
+        color: #333; 
+    }
+    .card { 
+        background: white; 
+        padding: 30px; 
+        border-radius: 12px; 
+        box-shadow: 0 4px 16px rgba(0,0,0,0.06); 
+    }
+    
+    .file-upload-bar { 
+        margin-bottom: 10px; 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .btn-file { 
+        background: #e9ecef; 
+        color: #495057; 
+        border: 1px solid #ced4da; 
+        padding: 6px 12px; 
+        border-radius: 6px; 
+        cursor: pointer; 
+        font-size: 13px; 
+    }
+    .btn-file:hover { background: #dee2e6; }
+
+    /* 文本框重叠高亮容器 */
+    .editor-wrapper {
+        position: relative;
+        width: 100%;
+        height: 250px;
+        margin-bottom: 10px;
+    }
+
+    .editor-backdrop, textarea#textInput {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        padding: 12px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        box-sizing: border-box;
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 15px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-y: auto;
+    }
+
+    .editor-backdrop {
+        z-index: 1;
+        background-color: #fff;
+        color: transparent;
+        pointer-events: none;
+    }
+
+    textarea#textInput {
+        z-index: 2;
+        background: transparent;
+        color: #333;
+        resize: vertical;
+    }
+
+    .editor-backdrop mark.highlight {
+        background-color: #ffe58f;
+        color: transparent;
+        border-radius: 3px;
+        padding: 2px 0;
+    }
+
+    .config-section { background: #fafafa; border: 1px solid #eee; padding: 15px; border-radius: 8px; margin: 15px 0; }
+    .config-title { font-weight: bold; margin-bottom: 10px; font-size: 14px; color: #444; }
+    
+    /* 语速控制布局 */
+    .rate-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .btn-step { background: #e0e0e0; border: 1px solid #ccc; width: 32px; height: 32px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; flex-shrink: 0; }
+    .btn-step:hover { background: #d0d0d0; }
+
+    .info-bar { display: flex; justify-content: space-between; margin: 15px 0 20px; color: #666; font-size: 14px; }
+    
+    .action-buttons { display: flex; gap: 15px; }
+    button.btn-primary { color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    button.btn-primary:disabled { background: #ccc !important; cursor: not-allowed; }
+    
+    .status-box { margin-top: 20px; padding: 15px; border-radius: 6px; display: none; font-size: 14px; line-height: 1.5; }
+    .warning { background: #fffbe6; border: 1px solid #ffe58f; color: #873800; }
+    .error { background: #ff4d4f15; border: 1px solid #ff4d4f; color: #c41d7f; }
+    .success { background: #f6ffed; border: 1px solid #b7eb8f; color: #276749; }
+    .processing { background: #e6f7ff; border: 1px solid #91d5ff; color: #0050b3; }
+    .queued { background: #f9f0ff; border: 1px solid #d3ade8; color: #531dab; }
+    
+    .audio-item { background: #f8f9fa; border: 1px solid #e9ecef; padding: 15px; border-radius: 8px; margin-top: 15px; }
+    .audio-item h4 { margin: 0 0 10px 0; color: #0066cc; }
+    audio { width: 100%; }
+    .download-btn { display: inline-block; margin-top: 8px; color: #0066cc; font-size: 13px; text-decoration: none; }
+
+    /* 🔥🔥🔥 移动端专用的响应式适配 (小于 600px 屏宽自动生效) 🔥🔥🔥 */
+    @media (max-width: 600px) {
+        body {
+            padding: 8px;
+            margin: 10px auto;
+        }
+
+        .card {
+            padding: 16px;
+            border-radius: 10px;
+        }
+
+        /* 顶部工具栏垂直排列 */
+        .file-upload-bar {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .file-upload-bar > div {
+            display: flex;
+            width: 100%;
+            gap: 6px;
+        }
+
+        .btn-file {
+            flex: 1;
+            text-align: center;
+            padding: 8px 4px;
+        }
+
+        /* 修复语速说明挤成一竖列的致命 BUG */
+        .rate-control small {
+            width: 100%;
+            margin-left: 0 !important;
+            margin-top: 6px;
+            display: block;
+            color: #888;
+        }
+
+        /* 统计栏卡片化网格，防止“1个文字”被断开 */
+        .info-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            text-align: center;
+            background: #f8fafc;
+            padding: 10px 6px;
+            border-radius: 8px;
+            border: 1px solid #edf2f7;
+            font-size: 12px;
+        }
+
+        .info-bar span {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        /* 底部主按钮改为 100% 宽度的上下垂直堆叠排列 */
+        .action-buttons {
+            flex-direction: column !direction;
+            gap: 10px !important;
+        }
+
+        .action-buttons button {
+            width: 100%;
+            padding: 14px 10px;
+            font-size: 15px;
+            text-align: center;
+        }
+    }
+</style>
+</head>
+<body>
+    <div class="card">
+        <h2>🎙️ 长文本朗读服务</h2>
+        
+        <div class="file-upload-bar">
+            <span style="font-size: 13px; color: #666;">支持快捷操作或导入外部文件：</span>
+            <div>
+                <button class="btn-file" onclick="clearText()">🗑️ 清空</button>
+                <button class="btn-file" onclick="pasteText()">📋 粘贴</button>
+                <input type="file" id="fileInput" accept=".txt,.md,.text" style="display: none;" onchange="handleFileUpload(event)">
+                <button class="btn-file" onclick="document.getElementById('fileInput').click()">📁 导入文件</button>
+            </div>
+        </div>
+
+        <div class="editor-wrapper">
+            <div id="backdrop" class="editor-backdrop"></div>
+            <textarea id="textInput" placeholder="在此粘贴或导入长文本/文章/小说..." oninput="syncBackdrop(); updateStats();" onscroll="syncScroll()">这是用于测试 Edge-TTS 多人轮流朗读与长文本切分的示例文本。
+
+微软的 Edge TTS 是目前效果极佳且免费的语音合成引擎。
+如果文本非常长，系统会自动切分为多个分卷，并在段落之间随机换人朗读，避免听觉疲劳。
+
+欢迎直接点击下方“▶️ 立即听书”体验 0.5 秒秒播与框内高亮，或者点击“💾 合成 MP3 文件”进行后台排队与下载！</textarea>
+        </div>
+
+        <div class="config-section">
+            <div class="config-title">1. 选择参与朗读的角色（勾选多个随机轮换，仅勾选 1 个全程指定）：</div>
+            <div id="voicesContainer">正在加载角色列表...</div>
+
+            <div class="config-title" style="margin-top: 15px;">2. 整体语速微调（在各角色基准上叠加）：</div>
+            <div class="rate-control">
+                <button class="btn-step" onclick="adjustRate(-5)">-</button>
+                <input type="range" id="rateRange" min="-50" max="120" step="5" value="0" oninput="syncRateDisplay(this.value)">
+                <button class="btn-step" onclick="adjustRate(5)">+</button>
+                <span id="rateVal" style="font-weight: bold; width: 60px; text-align: center;">+0%</span>
+                <small style="color: #777; margin-left: 10px;">（例如云扬基准 -15%，叠加微调值后为实际语速）</small>
+            </div>
+        </div>
+        
+        <div class="info-bar">
+            <span>总字数: <strong id="charCount">0</strong> 字</span>
+            <span>预估总长: <strong id="estTime">0</strong> 分钟</span>
+            <span>预计输出: <strong id="estParts">1</strong> 个文件</span>
+        </div>
+
+        <div class="action-buttons">
+            <button id="instantBtn" class="btn-primary" style="background: #10b981;" onclick="startInstantPlayer()">▶️ 立即听书 (0.5秒秒播+框内高亮)</button>
+            <button id="pauseBtn" class="btn-primary" style="background: #64748b; display: none;" onclick="pauseInstantPlayer()">⏸️ 暂停朗读</button>
+            <button id="submitBtn" class="btn-primary" style="background: #0066cc;" onclick="submitTTS(false)">💾 合成 MP3 文件 (可下载)</button>
+        </div>
+
+        <div id="statusBox" class="status-box"></div>
+        <div id="audioList"></div>
+    </div>
+
+    <script>
+        let pollTimer = null;
+        let sentences = [];
+        let currentIndex = 0;
+        let isInstantPlaying = false;
+        let audioCache = {};
+
+        let audioA = new Audio();
+        let audioB = new Audio();
+        let isAudioAActive = true; 
+        const PREBUFFER_COUNT = 3;
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            await loadConfig();
+            checkAndResumeTask();
+            updateStats();
+            syncBackdrop();
+        });
+
+        async function loadConfig() {
+            try {
+                const res = await fetch("/api/config");
+                const data = await res.json();
+                renderVoiceCheckboxes(data.voices);
+                restoreUserPreferences();
+            } catch (err) {
+                document.getElementById("voicesContainer").innerText = "无法加载角色列表，请检查后端。";
+            }
+        }
+
+        function renderVoiceCheckboxes(voices) {
+            const container = document.getElementById("voicesContainer");
+            container.innerHTML = "";
+            for (const [key, info] of Object.entries(voices)) {
+                const baseRateStr = info.base_rate >= 0 ? `+${info.base_rate}%` : `${info.base_rate}%`;
+                const label = document.createElement("label");
+                label.style.cssText = "margin-right: 15px; display: inline-block; margin-bottom: 5px;";
+                label.innerHTML = `
+                    <input type="checkbox" name="voiceSelect" value="${key}" onchange="saveUserPreferences()"> 
+                    ${info.name} 
+                `;
+                container.appendChild(label);
+            }
+        }
+
+        function saveUserPreferences() {
+            const checkboxes = document.querySelectorAll('input[name="voiceSelect"]:checked');
+            const selectedVoices = Array.from(checkboxes).map(cb => cb.value);
+            const rateOffset = document.getElementById("rateRange").value;
+            localStorage.setItem("tts_user_prefs", JSON.stringify({ voices: selectedVoices, rate: rateOffset }));
+        }
+
+        function restoreUserPreferences() {
+            const saved = localStorage.getItem("tts_user_prefs");
+            if (!saved) {
+                document.querySelectorAll('input[name="voiceSelect"]').forEach(cb => cb.checked = true);
+                return;
+            }
+            try {
+                const prefs = JSON.parse(saved);
+                if (prefs.voices && prefs.voices.length > 0) {
+                    document.querySelectorAll('input[name="voiceSelect"]').forEach(cb => {
+                        cb.checked = prefs.voices.includes(cb.value);
+                    });
+                }
+                if (prefs.rate !== undefined) {
+                    syncRateDisplay(prefs.rate);
+                }
+            } catch (e) {}
+        }
+
+        function adjustRate(delta) {
+            const slider = document.getElementById("rateRange");
+            let newVal = parseInt(slider.value) + delta;
+            newVal = Math.max(-50, Math.min(100, newVal));
+            syncRateDisplay(newVal);
+        }
+
+        function syncRateDisplay(val) {
+            const slider = document.getElementById("rateRange");
+            slider.value = val;
+            document.getElementById("rateVal").innerText = (val >= 0 ? '+' : '') + val + '%';
+            saveUserPreferences();
+        }
+
+        function syncScroll() {
+            const input = document.getElementById("textInput");
+            const backdrop = document.getElementById("backdrop");
+            backdrop.scrollTop = input.scrollTop;
+        }
+
+        function syncBackdrop() {
+            const input = document.getElementById("textInput");
+            const backdrop = document.getElementById("backdrop");
+            backdrop.innerText = input.value;
+            syncScroll();
+        }
+
+        function clearText() {
+            document.getElementById("textInput").value = "";
+            syncBackdrop();
+            updateStats();
+        }
+
+        async function pasteText() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    document.getElementById("textInput").value = text;
+                    syncBackdrop();
+                    updateStats();
+                }
+            } catch (err) {
+                alert("读取剪贴板失败，请使用快捷键 Ctrl+V / Cmd+V 粘贴。");
+            }
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById("textInput").value = e.target.result;
+                syncBackdrop();
+                updateStats();
+            };
+            reader.readAsText(file, "UTF-8");
+        }
+
+        function updateStats() {
+            const text = document.getElementById("textInput").value;
+            const count = text.length;
+            document.getElementById("charCount").innerText = count;
+            document.getElementById("estTime").innerText = (count / 300).toFixed(1);
+            document.getElementById("estParts").innerText = Math.max(1, Math.ceil(count / 10000));
+        }
+
+        function getSelectedVoices() {
+            const checkboxes = document.querySelectorAll('input[name="voiceSelect"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
+        // ================= 即时听书引擎 =================
+        function parseSentences(text) {
+            const raw = text.split(/(?<=[。！？\n!?])/);
+            return raw.map(s => s.trim()).filter(s => s.length > 0);
+        }
+
+        function prebufferNextSentences(fromIndex) {
+            for (let i = fromIndex; i < Math.min(fromIndex + PREBUFFER_COUNT, sentences.length); i++) {
+                if (!audioCache[i]) {
+                    fetchChunkAudio(sentences[i], i);
+                }
+            }
+        }
+
+        async function startInstantPlayer() {
+            const text = document.getElementById("textInput").value;
+            if (!text.trim()) { alert("请先输入文本！"); return; }
+
+            sentences = parseSentences(text);
+            if (sentences.length === 0) return;
+
+            currentIndex = 0;
+            isInstantPlaying = true;
+            audioCache = {};
+            isAudioAActive = true;
+
+            document.getElementById("pauseBtn").style.display = "inline-block";
+            document.getElementById("instantBtn").innerText = "🔄 重新播放";
+
+            prebufferNextSentences(0);
+            playInstantSentence(0);
+        }
+
+        async function playInstantSentence(index) {
+            if (index >= sentences.length || !isInstantPlaying) {
+                isInstantPlaying = false;
+                syncBackdrop();
+                document.getElementById("pauseBtn").style.display = "none";
+                document.getElementById("instantBtn").innerText = "▶️ 立即听书 (0.5秒秒播+框内高亮)";
+                return;
+            }
+
+            currentIndex = index;
+            highlightTextareaSentence(index);
+
+            prebufferNextSentences(index);
+
+            let audioUrl = audioCache[index];
+            if (!audioUrl) {
+                audioUrl = await fetchChunkAudio(sentences[index], index);
+            }
+
+            if (!audioUrl) return;
+
+            let currentAudio = isAudioAActive ? audioA : audioB;
+            let nextAudio = isAudioAActive ? audioB : audioA;
+
+            currentAudio.src = audioUrl;
+            currentAudio.play();
+
+            if (index + 1 < sentences.length) {
+                const nextUrl = audioCache[index + 1];
+                if (nextUrl) {
+                    nextAudio.src = nextUrl;
+                    nextAudio.load();
+                }
+            }
+
+            currentAudio.onended = () => {
+                if (isInstantPlaying) {
+                    isAudioAActive = !isAudioAActive;
+                    playInstantSentence(index + 1);
+                }
+            };
+        }
+
+        function highlightTextareaSentence(index) {
+            const text = document.getElementById("textInput").value;
+            const currentSent = sentences[index];
+            const backdrop = document.getElementById("backdrop");
+            const input = document.getElementById("textInput");
+
+            if (!currentSent) return;
+
+            const sentIdx = text.indexOf(currentSent);
+            if (sentIdx !== -1) {
+                const before = text.substring(0, sentIdx);
+                const after = text.substring(sentIdx + currentSent.length);
+                
+                backdrop.innerHTML = escapeHtml(before) + `<mark class="highlight">${escapeHtml(currentSent)}</mark>` + escapeHtml(after);
+                
+                const mark = backdrop.querySelector("mark.highlight");
+                if (mark) {
+                    const targetScrollTop = mark.offsetTop - (input.clientHeight / 2) + (mark.offsetHeight / 2);
+                    input.scrollTop = Math.max(0, targetScrollTop);
+                    syncScroll();
+                }
+            }
+        }
+
+        function pauseInstantPlayer() {
+            isInstantPlaying = false;
+            audioA.pause();
+            audioB.pause();
+            document.getElementById("pauseBtn").style.display = "none";
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        async function fetchChunkAudio(text, index) {
+            const selectedVoices = getSelectedVoices();
+            const rateOffset = parseInt(document.getElementById("rateRange").value);
+            const voice = selectedVoices[index % selectedVoices.length];
+
+            try {
+                const res = await fetch("/api/tts_stream", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: text, voice: voice, rate_offset: rateOffset })
+                });
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                audioCache[index] = url;
+                return url;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        // ================= 后台排队生成 MP3 文件 =================
+        async function submitTTS(force) {
+            const text = document.getElementById("textInput").value;
+            const selectedVoices = getSelectedVoices();
+            const rateOffset = parseInt(document.getElementById("rateRange").value);
+
+            if (!text.trim()) { alert("请先输入文本！"); return; }
+            if (selectedVoices.length === 0) { alert("请至少勾选一个角色！"); return; }
+
+            try {
+                const res = await fetch("/api/tts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        text: text,
+                        selected_voices: selectedVoices,
+                        rate_offset: rateOffset,
+                        force_submit: force
+                    })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showStatus(data.detail || "请求失败", "error");
+                } else if (data.status === "warning") {
+                    if (confirm(data.message)) {
+                        submitTTS(true);
+                    } else {
+                        showStatus("已取消合成。", "warning");
+                    }
+                } else if (data.status === "started") {
+                    localStorage.setItem("tts_active_task_id", data.task_id);
+                    startPollingTask(data.task_id);
+                }
+            } catch (err) {
+                showStatus("提交失败，网络异常: " + err, "error");
+            }
+        }
+
+        function startPollingTask(taskId) {
+            const btn = document.getElementById("submitBtn");
+            btn.disabled = true;
+
+            if (pollTimer) clearInterval(pollTimer);
+
+            pollTimer = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/task/${taskId}`);
+                    if (!res.ok) {
+                        clearInterval(pollTimer);
+                        btn.disabled = false;
+                        showStatus("任务异常，无法查询状态", "error");
+                        return;
+                    }
+
+                    const task = await res.json();
+
+                    if (task.status === "queued") {
+                        showStatus(`☕ ${task.progress}`, "queued");
+                    } else if (task.status === "processing") {
+                        showStatus(`⏳ ${task.progress} (后台持续合成中，关闭页面不影响进度)`, "processing");
+                    } else if (task.status === "success") {
+                        clearInterval(pollTimer);
+                        btn.disabled = false;
+                        localStorage.removeItem("tts_active_task_id");
+                        
+                        showStatus(`🎉 合成成功！共生成 ${task.files.length} 个音频文件，耗时: ${task.elapsed} 秒。`, "success");
+                        renderAudioFiles(task.files);
+                    } else if (task.status === "error") {
+                        clearInterval(pollTimer);
+                        btn.disabled = false;
+                        localStorage.removeItem("tts_active_task_id");
+                        showStatus(task.error_message || "合成出现异常", "error");
+                    }
+                } catch (e) {
+                    // 忽略网络波动
+                }
+            }, 1500);
+        }
+
+        function checkAndResumeTask() {
+            const activeTaskId = localStorage.getItem("tts_active_task_id");
+            if (activeTaskId) {
+                startPollingTask(activeTaskId);
+            }
+        }
+
+        function renderAudioFiles(files) {
+            const container = document.getElementById("audioList");
+            container.innerHTML = "<h3>🎧 MP3 合成结果列表：</h3>";
+            files.forEach(file => {
+                const item = document.createElement("div");
+                item.className = "audio-item";
+                item.innerHTML = `
+                    <h4>${file.title}</h4>
+                    <audio controls src="${file.url}"></audio>
+                    <div>
+                        <a class="download-btn" href="${file.url}" download="${file.filename}">⬇️ 下载 MP3 文件</a>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function showStatus(msg, type) {
+            const box = document.getElementById("statusBox");
+            box.className = `status-box ${type}`;
+            box.innerText = msg;
+            box.style.display = "block";
+        }
+    </script>
+</body>
+</html>
